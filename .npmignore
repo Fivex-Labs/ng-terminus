@@ -1,0 +1,33 @@
+# Source files
+/src
+
+# Development files
+/node_modules
+.editorconfig
+.gitignore
+tsconfig.json
+ng-package.json
+*.tgz
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Testing
+/coverage
+/e2e
+
+# Build tools
+angular.json
+karma.conf.js
+protractor.conf.js
+
+# Documentation (keep README.md)
+CONTRIBUTING.md 
