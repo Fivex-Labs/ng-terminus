@@ -4,7 +4,7 @@
   <img src="https://fivexlabs.com/assets/icon/logos/icon-logo-square.jpeg" alt="Fivex Labs" width="80" height="80" />
   
   <h3>Angular Subscription Management Library</h3>
-  <p>Declarative utilities for managing RxJS subscriptions and preventing memory leaks in Angular applications</p>
+  <p>Comprehensive utilities for managing RxJS subscriptions and preventing memory leaks in Angular applications</p>
   
   <p>Made with ❤️ by <a href="https://fivexlabs.com">Fivex Labs</a></p>
 
@@ -43,7 +43,16 @@ Angular applications commonly suffer from **memory leaks** caused by unmanaged R
 - **⚡ Zero Dependencies**: Only peer dependencies on Angular and RxJS
 - **🌳 Tree Shakable**: Optimized for minimal bundle size impact
 
-### 🔥 **Advanced Features**
+### 🔥 **Enhanced Features**
+- **🛣️ Route-based Management**: Automatically manage subscriptions based on route navigation
+- **🌐 HTTP Request Control**: Advanced HTTP request cancellation and retry mechanisms
+- **👁️ Visibility-based Subscriptions**: Pause/resume subscriptions based on page visibility
+- **📝 Reactive Forms Integration**: Seamless integration with Angular reactive forms
+- **🧠 Memory Optimization**: Advanced memory management and leak detection
+- **🔍 Enhanced Debugging**: Comprehensive debugging tools with performance metrics
+- **🧪 Testing Utilities**: Complete testing framework for subscription management
+
+### 🔧 **Advanced Features**
 - **🔍 Debugging Tools**: Built-in utilities for tracking subscription lifecycle in development
 - **🛠️ Utility Functions**: Helper functions for safe unsubscription and batch management
 - **📊 Subscription Tracking**: Monitor active subscriptions and get insights
@@ -58,7 +67,7 @@ npm install @fivexlabs/ng-terminus
 yarn add @fivexlabs/ng-terminus
 ```
 
-> **Note**: This library requires Angular 14+ and RxJS 7+.
+> **Note**: This library requires Angular 14+ and RxJS 7+. For enhanced features, you may also need @angular/router, @angular/forms, and @angular/common.
 
 ## 🚀 Quick Start
 
@@ -95,339 +104,315 @@ export class UserDashboardComponent {
 }
 ```
 
-### The Service Manager Way
+## 🔥 Enhanced Features
 
-Perfect for complex components with many subscriptions:
+### 🛣️ Route-based Subscription Management
+
+Automatically manage subscriptions based on route navigation:
 
 ```typescript
-import { Component, OnInit } from '@angular/core';
-import { SubscriptionManager } from '@fivexlabs/ng-terminus';
+import { takeUntilRoute, takeWhileOnRoute } from '@fivexlabs/ng-terminus';
 
-@Component({
-  selector: 'app-complex-dashboard',
-  providers: [SubscriptionManager] // 🔑 Component-level provider
-})
-export class ComplexDashboardComponent implements OnInit {
-  constructor(
-    private dataService: DataService,
-    private subManager: SubscriptionManager
-  ) {}
+@Component({...})
+export class DashboardComponent {
+  constructor(private dataService: DataService) {
+    // Unsubscribe when navigating away from any route
+    this.dataService.getLiveData()
+      .pipe(takeUntilRoute())
+      .subscribe(data => this.updateDashboard(data));
 
-  ngOnInit() {
-    // ✨ Add multiple subscriptions - all cleaned up automatically!
-    this.subManager.add(
-      this.dataService.getUserData().subscribe(data => this.handleUserData(data)),
-      this.dataService.getAnalytics().subscribe(analytics => this.updateCharts(analytics)),
-      interval(30000).subscribe(() => this.refreshData()),
-      this.websocketService.connect().subscribe(message => this.handleMessage(message))
-    );
-
-    console.log(`Managing ${this.subManager.activeCount} subscriptions`);
+    // Only active while on dashboard routes
+    this.dataService.getDashboardMetrics()
+      .pipe(takeWhileOnRoute('/dashboard/**'))
+      .subscribe(metrics => this.updateMetrics(metrics));
   }
-  
-  // 🎉 No ngOnDestroy needed! Zero boilerplate!
 }
 ```
 
-## 🔥 Advanced Features Showcase
+### 🌐 HTTP Request Management
 
-### 🔍 Subscription Debugging
-
-Track subscription lifecycle in development with powerful debugging tools:
-
-```typescript
-import { SubscriptionDebugger } from '@fivexlabs/ng-terminus';
-
-// Enable debugging in development
-if (!environment.production) {
-  SubscriptionDebugger.configure({
-    enableLogging: true,
-    logPrefix: '[MyApp Subscriptions]',
-    captureStackTrace: true
-  });
-}
-
-// Now all subscription lifecycle events will be logged!
-```
-
-### 🛠️ Utility Functions
-
-Handle edge cases and complex scenarios with ease:
+Advanced HTTP request cancellation and retry mechanisms:
 
 ```typescript
 import { 
-  safeUnsubscribe, 
-  createManagedObservable,
-  manageManyObservables 
+  HttpRequestManager, 
+  cancelOnDestroy, 
+  retryWithBackoff,
+  logHttpRequests 
+} from '@fivexlabs/ng-terminus';
+
+@Component({
+  providers: [HttpRequestManager]
+})
+export class ApiComponent {
+  constructor(
+    private http: HttpClient,
+    private httpManager: HttpRequestManager
+  ) {
+    // Cancellable requests
+    const { request$, cancel } = this.httpManager.createCancellableRequest(
+      () => this.http.get('/api/data'),
+      'user-data'
+    );
+
+    request$
+      .pipe(
+        logHttpRequests('User Data'),
+        retryWithBackoff(3, 1000),
+        cancelOnDestroy()
+      )
+      .subscribe(data => this.handleData(data));
+
+    // Cancel after 5 seconds if needed
+    setTimeout(() => cancel(), 5000);
+  }
+}
+```
+
+### 👁️ Visibility-based Subscriptions
+
+Pause/resume subscriptions based on page visibility:
+
+```typescript
+import { 
+  takeWhileVisible, 
+  bufferWhileHidden, 
+  throttleWhileHidden 
 } from '@fivexlabs/ng-terminus';
 
 @Component({...})
-export class AdvancedComponent {
-  constructor(private http: HttpClient) {
-    // ✨ Safe unsubscription - never throws
-    let subscription: Subscription | undefined;
-    safeUnsubscribe(subscription); // Won't throw if undefined
+export class LiveDataComponent {
+  constructor(private dataService: DataService) {
+    // Pause when page is hidden
+    this.dataService.getLiveUpdates()
+      .pipe(takeWhileVisible())
+      .subscribe(update => this.processUpdate(update));
 
-    // ✨ Functional approach to managed observables
-    const managedData$ = createManagedObservable(
-      this.http.get('/api/data'),
-      inject(DestroyRef)
-    );
+    // Buffer notifications while hidden
+    this.dataService.getNotifications()
+      .pipe(bufferWhileHidden(10))
+      .subscribe(notifications => this.showNotifications(notifications));
 
-    // ✨ Batch manage multiple observables
-    const [users$, posts$, comments$] = manageManyObservables([
-      this.http.get('/api/users'),
-      this.http.get('/api/posts'),
-      this.http.get('/api/comments')
-    ]);
+    // Throttle heartbeat when hidden
+    this.dataService.getHeartbeat()
+      .pipe(throttleWhileHidden(30000))
+      .subscribe(heartbeat => this.updateStatus(heartbeat));
   }
 }
 ```
 
-### 📊 Subscription Tracking
+### 📝 Reactive Forms Integration
 
-Monitor and analyze your subscription usage:
+Seamless integration with Angular reactive forms:
 
 ```typescript
+import { 
+  takeUntilFormDestroyed, 
+  takeWhileFormValid,
+  FormSubscriptionManager 
+} from '@fivexlabs/ng-terminus';
+
 @Component({
-  providers: [SubscriptionManager]
+  providers: [FormSubscriptionManager]
 })
-export class MonitoredComponent {
-  constructor(private subManager: SubscriptionManager) {
-    // Add subscriptions
-    this.subManager.add(
-      stream1$.subscribe(),
-      stream2$.subscribe()
+export class FormComponent {
+  form = this.fb.group({
+    name: ['', Validators.required],
+    email: ['', [Validators.required, Validators.email]]
+  });
+
+  constructor(
+    private fb: FormBuilder,
+    private formManager: FormSubscriptionManager
+  ) {
+    // Auto-cleanup form subscriptions
+    this.form.valueChanges
+      .pipe(takeUntilFormDestroyed())
+      .subscribe(value => this.handleFormChange(value));
+
+    // Only emit when form is valid
+    this.form.valueChanges
+      .pipe(takeWhileFormValid(() => this.form.valid))
+      .subscribe(value => this.saveValidForm(value));
+
+    // Managed form subscriptions
+    this.formManager.manage(
+      this.form.get('email')!.valueChanges,
+      'email-validation'
+    ).subscribe(email => this.validateEmail(email));
+  }
+}
+```
+
+### 🧠 Memory Optimization
+
+Advanced memory management and leak detection:
+
+```typescript
+import { 
+  MemoryOptimizer, 
+  optimizeMemory, 
+  shareWithAutoCleanup,
+  MemoryUtils 
+} from '@fivexlabs/ng-terminus';
+
+@Component({...})
+export class OptimizedComponent {
+  constructor(private dataService: DataService) {
+    // Enable memory optimization
+    MemoryOptimizer.getInstance().enable();
+
+    // Optimized observable with sharing
+    const optimizedData$ = this.dataService.getData()
+      .pipe(optimizeMemory({ share: true, name: 'user-data' }));
+
+    // Auto-cleanup sharing
+    const sharedStream$ = this.dataService.getLiveStream()
+      .pipe(shareWithAutoCleanup(5000));
+
+    // Monitor memory usage
+    MemoryUtils.logMemoryStats();
+  }
+}
+```
+
+### 🔍 Enhanced Debugging
+
+Comprehensive debugging tools with performance metrics:
+
+```typescript
+import { SubscriptionDebuggerService } from '@fivexlabs/ng-terminus';
+
+@Component({...})
+export class DebugComponent {
+  constructor(private debugger: SubscriptionDebuggerService) {
+    // Enable debugging
+    this.debugger.enable();
+
+    // Create debuggable subscription
+    const debugObs = this.debugger.debugSubscription(
+      this.dataService.getData(),
+      {
+        name: 'UserData',
+        componentName: 'DebugComponent',
+        logEmissions: true,
+        captureStackTrace: true
+      }
     );
 
-    // ✨ Monitor subscription health
-    console.log(`Active subscriptions: ${this.subManager.activeCount}`);
-    console.log(`Has active subscriptions: ${this.subManager.hasActiveSubscriptions}`);
+    debugObs.subscribe(data => this.handleData(data));
+
+    // Monitor performance
+    setTimeout(() => {
+      this.debugger.logStatus();
+      const metrics = this.debugger.getPerformanceMetrics();
+      console.log('Performance:', metrics);
+    }, 5000);
+  }
+}
+```
+
+### 🧪 Testing Utilities
+
+Complete testing framework for subscription management:
+
+```typescript
+import { 
+  TestObservable, 
+  SubscriptionTester, 
+  MemoryLeakDetector,
+  TestScenarios 
+} from '@fivexlabs/ng-terminus';
+
+describe('SubscriptionComponent', () => {
+  let tester: SubscriptionTester;
+  let leakDetector: MemoryLeakDetector;
+
+  beforeEach(() => {
+    tester = new SubscriptionTester();
+    leakDetector = new MemoryLeakDetector();
+    leakDetector.startMonitoring();
+  });
+
+  it('should manage subscriptions correctly', async () => {
+    const testObs = new TestObservable<string>();
     
-    // ✨ Method chaining for fluent API
-    this.subManager
-      .add(stream3$.subscribe())
-      .add(stream4$.subscribe());
-  }
-}
+    tester.subscribe(testObs, 'test-stream');
+    
+    testObs.emit('test-value');
+    await tester.waitForEmissions('test-stream', 1);
+    
+    expect(tester.getEmissionCount('test-stream')).toBe(1);
+    
+    testObs.complete();
+    await tester.waitForCompletion('test-stream');
+    
+    const leakCheck = leakDetector.checkForLeaks();
+    expect(leakCheck.hasLeaks).toBeFalsy();
+  });
+});
 ```
 
-## 📚 Documentation
+## 📚 Complete API Reference
 
-### Basic Subscription Management
+### Core Operators
+- `takeUntilDestroyed()` - Automatic cleanup on component destruction
+- `untilDestroyed()` - Simplified alias with auto-injection
 
-The foundation of ng-terminus is built on two core patterns:
+### Route-based Operators
+- `takeUntilRoute(route?)` - Unsubscribe on route change
+- `takeWhileOnRoute(pattern)` - Active only on specific routes
 
-```typescript
-// Pattern 1: Operator-based (Recommended)
-import { takeUntilDestroyed } from '@fivexlabs/ng-terminus';
+### HTTP Operators
+- `cancelOnDestroy()` - Cancel HTTP requests on destruction
+- `cancelPrevious()` - Cancel previous requests when new ones start
+- `retryWithBackoff(retries, delay, maxDelay)` - Exponential backoff retry
+- `logHttpRequests(name?)` - Log HTTP request lifecycle
 
-data$.pipe(takeUntilDestroyed()).subscribe();
+### Visibility Operators
+- `takeWhileVisible()` - Pause when page is hidden
+- `takeUntilHidden()` - Unsubscribe when page becomes hidden
+- `bufferWhileHidden(size)` - Buffer emissions while hidden
+- `throttleWhileHidden(ms)` - Throttle when page is hidden
 
-// Pattern 2: Service-based (For complex scenarios)
-import { SubscriptionManager } from '@fivexlabs/ng-terminus';
+### Forms Operators
+- `takeUntilFormDestroyed()` - Form-specific cleanup
+- `takeWhileFormValid(validator)` - Emit only when form is valid
 
-constructor(private subManager: SubscriptionManager) {
-  this.subManager.add(subscription1, subscription2);
-}
-```
+### Memory Operators
+- `optimizeMemory(options)` - Memory-optimized observables
+- `shareWithAutoCleanup(delay)` - Auto-cleanup sharing
+- `limitEmissionRate(rate)` - Rate limiting for memory efficiency
 
-### takeUntilDestroyed Operator
+### Services
+- `SubscriptionManager` - Centralized subscription management
+- `HttpRequestManager` - HTTP request lifecycle management
+- `FormSubscriptionManager` - Form-specific subscription management
+- `SubscriptionDebuggerService` - Advanced debugging capabilities
 
-#### Automatic DestroyRef Injection
-The simplest and most common usage - no configuration needed:
+### Testing Utilities
+- `TestObservable<T>` - Controllable test observable
+- `SubscriptionTester` - Subscription testing framework
+- `MemoryLeakDetector` - Memory leak detection
+- `TestScenarios` - Pre-built test scenarios
 
-```typescript
-@Component({...})
-export class SimpleComponent {
-  constructor(private dataService: DataService) {
-    // ✨ DestroyRef is automatically injected
-    this.dataService.getData()
-      .pipe(takeUntilDestroyed())
-      .subscribe(data => console.log(data));
-  }
-}
-```
+## 🔧 Configuration
 
-#### Explicit DestroyRef Usage
-For advanced scenarios where you need control:
-
-```typescript
-@Component({...})
-export class AdvancedComponent {
-  private destroyRef = inject(DestroyRef);
-
-  constructor(private dataService: DataService) {
-    this.dataService.getData()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(data => console.log(data));
-  }
-}
-```
-
-#### Service Usage
-Use in services for background tasks:
+Configure ng-terminus for your application:
 
 ```typescript
-@Injectable()
-export class BackgroundService {
-  private destroyRef = inject(DestroyRef);
-
-  constructor(private http: HttpClient) {
-    // ✨ Auto-cleanup when service is destroyed
-    interval(60000)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.performHealthCheck());
-  }
-}
-```
-
-### SubscriptionManager Service
-
-#### Component-Level Provider (Recommended)
-Always provide SubscriptionManager at the component level for proper lifecycle management:
-
-```typescript
-@Component({
-  selector: 'app-dashboard',
-  providers: [SubscriptionManager] // 🔑 Key: Component-level provider
-})
-export class DashboardComponent implements OnInit {
-  constructor(private subManager: SubscriptionManager) {}
-
-  ngOnInit() {
-    // ✨ Add multiple subscriptions at once
-    this.subManager.add(
-      this.userService.getProfile().subscribe(profile => this.profile = profile),
-      this.notificationService.getAlerts().subscribe(alerts => this.alerts = alerts),
-      interval(30000).subscribe(() => this.refreshData())
-    );
-  }
-  
-  // ✨ Automatic cleanup on component destroy - no ngOnDestroy needed!
-}
-```
-
-#### Dynamic Subscription Management
-Add and remove subscriptions based on user interactions:
-
-```typescript
-@Component({
-  providers: [SubscriptionManager]
-})
-export class InteractiveComponent {
-  private currentStreamSub?: Subscription;
-
-  constructor(private subManager: SubscriptionManager) {}
-
-  startMonitoring(streamId: string) {
-    // ✨ Add new subscription
-    this.currentStreamSub = this.dataService.getStream(streamId).subscribe();
-    this.subManager.add(this.currentStreamSub);
-  }
-
-  stopMonitoring() {
-    // ✨ Remove specific subscription
-    if (this.currentStreamSub) {
-      this.subManager.remove(this.currentStreamSub);
-      this.currentStreamSub.unsubscribe();
-    }
-  }
-
-  getStatus() {
-    return `Managing ${this.subManager.activeCount} active subscriptions`;
-  }
-}
-```
-
-#### Method Chaining
-Fluent API for readable subscription management:
-
-```typescript
-ngOnInit() {
-  this.subManager
-    .add(stream1$.subscribe())
-    .add(stream2$.subscribe())
-    .add(stream3$.subscribe());
-}
-```
-
-### Module Import (Optional)
-
-If you want to use `SubscriptionManager` globally across your application:
-
-```typescript
-import { NgModule } from '@angular/core';
 import { NgTerminusModule } from '@fivexlabs/ng-terminus';
 
 @NgModule({
-  imports: [NgTerminusModule.forRoot()],
-  // ...
+  imports: [
+    NgTerminusModule.forRoot({
+      enableDebugger: !environment.production,
+      enableMemoryOptimization: true,
+      debugMode: !environment.production
+    })
+  ]
 })
-export class AppModule { }
-
-// For feature modules
-@NgModule({
-  imports: [NgTerminusModule.forFeature()],
-  // ...
-})
-export class FeatureModule { }
-```
-
-### Advanced Usage
-
-#### Combining with RxJS Operators
-Always place `takeUntilDestroyed` as the last operator in your pipe:
-
-```typescript
-this.dataService.getSearchResults(query)
-  .pipe(
-    debounceTime(300),
-    distinctUntilChanged(),
-    switchMap(query => this.http.get(`/api/search?q=${query}`)),
-    map(response => response.data),
-    takeUntilDestroyed() // ✨ Always last
-  )
-  .subscribe(results => this.searchResults = results);
-```
-
-#### Error Handling
-ng-terminus plays well with RxJS error handling:
-
-```typescript
-this.dataService.getRiskyData()
-  .pipe(
-    retry(3),
-    catchError(error => of([])),
-    takeUntilDestroyed()
-  )
-  .subscribe(data => this.handleData(data));
-```
-
-### Utility Functions
-
-Advanced utilities for edge cases and complex scenarios:
-
-#### Safe Unsubscription
-```typescript
-import { safeUnsubscribe } from '@fivexlabs/ng-terminus';
-
-let subscription: Subscription | undefined;
-safeUnsubscribe(subscription); // ✨ Never throws
-```
-
-#### Functional Observable Management
-```typescript
-import { createManagedObservable, manageManyObservables } from '@fivexlabs/ng-terminus';
-
-// Single observable
-const managed$ = createManagedObservable(this.http.get('/api/data'));
-
-// Multiple observables
-const [users$, posts$] = manageManyObservables([
-  this.http.get('/api/users'),
-  this.http.get('/api/posts')
-]);
+export class AppModule {}
 ```
 
 ## 🧪 Testing

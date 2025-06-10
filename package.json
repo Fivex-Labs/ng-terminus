@@ -1,7 +1,7 @@
 {
   "name": "@fivexlabs/ng-terminus",
-  "version": "1.0.1",
-  "description": "A declarative Angular library for managing RxJS subscriptions and preventing memory leaks",
+  "version": "2.0.0",
+  "description": "A comprehensive Angular library for managing RxJS subscriptions and preventing memory leaks with advanced features",
   "keywords": [
     "angular",
     "rxjs",
@@ -45,19 +45,23 @@
   "peerDependencies": {
     "@angular/core": ">=14.0.0",
     "@angular/common": ">=14.0.0",
+    "@angular/forms": ">=14.0.0",
+    "@angular/router": ">=14.0.0",
     "rxjs": ">=7.0.0"
   },
   "dependencies": {
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@angular/cli": "^17.0.0",
-    "@angular/common": "^17.0.0",
-    "@angular/core": "^17.0.0",
-    "@angular-devkit/build-angular": "^17.0.0",
-    "ng-packagr": "^17.0.0",
+    "@angular/cli": "^20.0.0",
+    "@angular/common": "^20.0.0",
+    "@angular/core": "^20.0.0",
+    "@angular/forms": "^20.0.0",
+    "@angular/router": "^20.0.0",
+    "@angular-devkit/build-angular": "^20.0.0",
+    "ng-packagr": "^20.0.0",
     "rxjs": "^7.8.0",
-    "typescript": "~5.2.0"
+    "typescript": "~5.8.0"
   },
   "type": "commonjs"
 }
