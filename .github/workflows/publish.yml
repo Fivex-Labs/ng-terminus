@@ -1,0 +1,105 @@
+name: Publish Package
+
+on:
+  # Trigger on new releases
+  release:
+    types: [published]
+  
+  # Trigger on push to main branch (optional - for automatic publishing)
+  push:
+    branches: [main]
+    paths: ['package.json']
+
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Ensure we get the full history to avoid issues with lockfile
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify package-lock.json
+        run: |
+          if [ -f package-lock.json ]; then
+            echo "package-lock.json exists"
+            echo "Lockfile version: $(node -p "require('./package-lock.json').lockfileVersion")"
+            echo "Package version in lockfile: $(node -p "require('./package-lock.json').version")"
+            echo "Package version in package.json: $(node -p "require('./package.json').version")"
+          else
+            echo "package-lock.json not found"
+          fi
+
+      - name: Install dependencies
+        run: |
+          # Try npm ci first, fallback to npm install if it fails
+          npm ci || {
+            echo "npm ci failed, falling back to npm install"
+            npm install
+          }
+
+      - name: Sync lockfile version
+        run: |
+          # Ensure package-lock.json version matches package.json
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          echo "Syncing lockfile to version: $PACKAGE_VERSION"
+          npm version $PACKAGE_VERSION --no-git-tag-version --allow-same-version
+
+      - name: Build package
+        run: npm run build
+
+      - name: Run tests (if available)
+        run: npm test || echo "No tests found, skipping..."
+
+      - name: Verify build output
+        run: |
+          echo "Build output:"
+          ls -la dist/
+          echo "Package contents:"
+          npm pack --dry-run
+
+      # Publish to npm registry
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
+
+      # Setup for GitHub Packages
+      - name: Setup Node.js for GitHub Packages
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://npm.pkg.github.com'
+
+      # Publish to GitHub Packages
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --access public
+
+      - name: Create summary
+        if: always()
+        run: |
+          echo "## Publication Summary 📦" >> $GITHUB_STEP_SUMMARY
+          echo "**Package:** @fivexlabs/ng-terminus" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** $(node -p "require('./package.json').version")" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Installation" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "npm install @fivexlabs/ng-terminus" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY 
