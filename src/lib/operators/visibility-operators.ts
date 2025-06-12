@@ -1,4 +1,5 @@
-import { inject, DestroyRef, DOCUMENT } from '@angular/core';
+import { inject, DestroyRef } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
 import { Observable, fromEvent, merge, EMPTY } from 'rxjs';
 import { switchMap, takeUntil, startWith, map, distinctUntilChanged, share } from 'rxjs/operators';
 
@@ -18,7 +19,7 @@ import { switchMap, takeUntil, startWith, map, distinctUntilChanged, share } fro
  */
 export function takeWhileVisible<T>(emitOnResume: boolean = true) {
   return function (source: Observable<T>): Observable<T> {
-    const document = inject(DOCUMENT, { optional: true });
+    const document = inject(DOCUMENT, { optional: true }) as Document | null;
     
     if (!document) {
       console.warn('takeWhileVisible: Document not available, operator will have no effect');
@@ -63,7 +64,7 @@ export function takeWhileVisible<T>(emitOnResume: boolean = true) {
  */
 export function takeUntilHidden<T>() {
   return function (source: Observable<T>): Observable<T> {
-    const document = inject(DOCUMENT, { optional: true });
+    const document = inject(DOCUMENT, { optional: true }) as Document | null;
     
     if (!document) {
       console.warn('takeUntilHidden: Document not available, operator will have no effect');
@@ -102,7 +103,7 @@ export function takeUntilHidden<T>() {
  */
 export function bufferWhileHidden<T>(bufferSize: number = 10) {
   return function (source: Observable<T>): Observable<T[]> {
-    const document = inject(DOCUMENT, { optional: true });
+    const document = inject(DOCUMENT, { optional: true }) as Document | null;
     
     if (!document) {
       console.warn('bufferWhileHidden: Document not available, operator will have no effect');
@@ -164,7 +165,7 @@ export function bufferWhileHidden<T>(bufferSize: number = 10) {
  */
 export function throttleWhileHidden<T>(hiddenThrottleMs: number = 30000) {
   return function (source: Observable<T>): Observable<T> {
-    const document = inject(DOCUMENT, { optional: true });
+    const document = inject(DOCUMENT, { optional: true }) as Document | null;
     
     if (!document) {
       console.warn('throttleWhileHidden: Document not available, operator will have no effect');
