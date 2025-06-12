@@ -1,0 +1,217 @@
+name: Advanced Package Publishing
+
+on:
+  release:
+    types: [published]
+  
+  push:
+    branches: [main]
+    paths: ['package.json']
+
+  workflow_dispatch:
+    inputs:
+      registry:
+        description: 'Choose registry to publish to'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+        - npm
+        - github
+        - both
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      should-publish: ${{ steps.version-check.outputs.should-publish }}
+      version: ${{ steps.version-check.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Check if version changed
+        id: version-check
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "Current version: $CURRENT_VERSION"
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+          # Check if this is a release event
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "Release event detected, will publish"
+            echo "should-publish=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Check if this is a manual dispatch
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual dispatch detected, will publish"
+            echo "should-publish=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # For push events, check if version changed
+          if git diff HEAD^ HEAD --name-only | grep -q "package.json"; then
+            PREVIOUS_VERSION=$(git show HEAD^:package.json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin', 'utf8')).version")
+            echo "Previous version: $PREVIOUS_VERSION"
+            
+            if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+              echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
+              echo "should-publish=true" >> $GITHUB_OUTPUT
+            else
+              echo "Version unchanged, skipping publish"
+              echo "should-publish=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "package.json not changed, skipping publish"
+            echo "should-publish=false" >> $GITHUB_OUTPUT
+          fi
+
+  publish-npm:
+    needs: check-version
+    if: needs.check-version.outputs.should-publish == 'true' && (github.event.inputs.registry == 'npm' || github.event.inputs.registry == 'both' || github.event.inputs.registry == '')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js for npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Verify package
+        run: |
+          npm pack --dry-run
+          echo "Package contents:"
+          npm pack --dry-run 2>/dev/null | tail -n +2
+
+      - name: Check if version exists on npm
+        id: npm-version-check
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+          if npm view @fivexlabs/ng-terminus@$VERSION version 2>/dev/null; then
+            echo "Version $VERSION already exists on npm"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version $VERSION does not exist on npm"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish to npm
+        if: steps.npm-version-check.outputs.exists == 'false'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "Publishing version ${{ needs.check-version.outputs.version }} to npm..."
+          npm publish --access public
+
+      - name: Skip npm publish
+        if: steps.npm-version-check.outputs.exists == 'true'
+        run: echo "Skipping npm publish - version already exists"
+
+  publish-github:
+    needs: check-version
+    if: needs.check-version.outputs.should-publish == 'true' && (github.event.inputs.registry == 'github' || github.event.inputs.registry == 'both' || github.event.inputs.registry == '')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js for GitHub Packages
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://npm.pkg.github.com'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Configure package for GitHub Packages
+        run: |
+          # Create a temporary package.json for GitHub Packages
+          cp package.json package.json.backup
+          
+          # Update publishConfig for GitHub Packages
+          node -e "
+            const pkg = require('./package.json');
+            pkg.publishConfig = {
+              registry: 'https://npm.pkg.github.com'
+            };
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
+
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Publishing version ${{ needs.check-version.outputs.version }} to GitHub Packages..."
+          npm publish --access public
+
+      - name: Restore original package.json
+        if: always()
+        run: |
+          if [ -f package.json.backup ]; then
+            mv package.json.backup package.json
+          fi
+
+  create-release-notes:
+    needs: [check-version, publish-npm, publish-github]
+    if: always() && needs.check-version.outputs.should-publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create deployment summary
+        run: |
+          echo "## Package Publication Summary" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.check-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Package:** @fivexlabs/ng-terminus" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.publish-npm.result }}" = "success" ]; then
+            echo "✅ **npm Registry:** Successfully published" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.publish-npm.result }}" = "skipped" ]; then
+            echo "⏭️ **npm Registry:** Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **npm Registry:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.publish-github.result }}" = "success" ]; then
+            echo "✅ **GitHub Packages:** Successfully published" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.publish-github.result }}" = "skipped" ]; then
+            echo "⏭️ **GitHub Packages:** Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **GitHub Packages:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Installation Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "**From npm:**" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "npm install @fivexlabs/ng-terminus@${{ needs.check-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**From GitHub Packages:**" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "npm install @fivexlabs/ng-terminus@${{ needs.check-version.outputs.version }} --registry=https://npm.pkg.github.com" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY 
